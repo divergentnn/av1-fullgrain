@@ -17,8 +17,9 @@ You need `git`, a C compiler (GCC or Clang), `meson`, `ninja` and, on x86,
 | `build/tools/av1grain/av1grain` | [grain-free copies](../../tools/av1grain/README.md) for the browser player |
 
 `decoder/dav1d` is a git submodule ([dav1d-fullgrain](https://github.com/divergentnn/dav1d-fullgrain)).
-In a clone made without `--recursive`, fetch it with
-`git submodule update --init`. Without it, only `av1-grain-seed` is built.
+In a clone made without `--recursive`, `meson setup` fetches it, or run
+`git submodule update --init`. Without it (in a ZIP download, say), only
+`av1-grain-seed` is built.
 
 ## Options
 

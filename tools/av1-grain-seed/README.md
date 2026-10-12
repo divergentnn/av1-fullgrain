@@ -15,15 +15,15 @@ the copies altogether.
 
 ## Install
 
-The tool is plain C11 with no dependencies; it doesn't need the decoder. A
-clone without `--recursive` builds only this tool.
+The tool is plain C11 with no dependencies; it doesn't need the decoder.
 
 **Linux and macOS** (needs a C compiler, `meson` and `ninja`):
 
 ```sh
 git clone https://github.com/divergentnn/av1-fullgrain.git
 cd av1-fullgrain
-meson setup build && ninja -C build
+meson setup build
+ninja -C build tools/av1-grain-seed/av1-grain-seed
 build/tools/av1-grain-seed/av1-grain-seed --help
 ```
 
