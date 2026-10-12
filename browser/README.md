@@ -1,29 +1,46 @@
-# av1-fullgrain in the browser
+# Browser player
 
-The browser's own AV1 decoder decodes a **grain-free copy** of a clip, and the grain is drawn on top from the grain
-parameters of every frame:
-- by WebGPU compute shaders;
-- or, where WebGPU is missing, by this fork's grain code compiled to WebAssembly.
+Full-frame grain on web pages, with no plugin or install for the viewer:
+- the browser's own AV1 decoder decodes a **grain-free copy** of a clip;
+- the grain is drawn on top from the clip's grain parameters, by WebGPU
+  compute shaders or, where WebGPU is missing, by the decoder's grain code
+  compiled to WebAssembly.
 
-Full-frame grain and standard AV1 grain are both bit-identical to the C code (dav1d-fullgrain, and dav1d's conformant
-grain).
+Full-frame grain and standard AV1 grain are both bit-identical to the C code
+(the decoder in `decoder/dav1d`, and dav1d's conformant grain).
 
-[flipcomp](https://github.com/divergentnn/flipcomp) (private), my comparison viewer, uses this kit for AV1 clips with
-film grain.
+**For viewers**, a browser that decodes AV1 is enough: Chrome, Edge, Firefox,
+and Safari only on Macs with M3 or later. **For a site**, three steps:
+
+1. make the grain-free copy and its grain file with
+   [av1grain](../tools/av1grain/README.md);
+2. build the kit with `browser/build.sh` (see [Build](#build)) and put
+   `browser/dist/web/` on the site;
+3. show clips with `createGrainClip` (see [Use](#use)). Serve over https; for
+   the WebAssembly fallback, the page must be cross-origin isolated
+   (COOP/COEP headers).
+
+**Tested:** Chrome on Linux (NVIDIA and AMD GPUs, and SwiftShader) and on
+macOS (Apple GPU), every picture checked against the C code. Safari on an
+M1/M2-class Mac has no AV1 decoder, and the player says so. Windows, Edge
+and Firefox: not tested.
+
+[flipcomp](https://github.com/divergentnn/flipcomp) (private), my comparison
+viewer, uses this kit for AV1 clips with film grain.
 
 ## How it fits together
 
 1. **At upload time** (any machine with this repository built), split the clip in two:
 
    ```sh
-   build/tools/av1grain strip IN.ivf OUT.ivf PARAMS.json
-   tools/av1grain_mp4.py IN.mp4 OUT.mp4 PARAMS.json --verify      # the same for MP4
+   build/tools/av1grain/av1grain strip IN.ivf OUT.ivf PARAMS.json
+   python3 tools/av1grain/av1grain_mp4.py IN.mp4 OUT.mp4 PARAMS.json --verify   # the same for MP4
    ```
 
    - `OUT` is the clip with every frame header's grain syntax replaced by `apply_grain = 0`. Tile data and everything
      else are untouched, so it decodes to exactly the original's pictures with grain off.
    - `PARAMS.json` lists the grain dav1d applied to each output picture (sets of parameters + a seed per picture).
-   - Positions come from dav1d's own frame header parser, through a hook in `src/obu.c`.
+   - Positions come from dav1d's own frame header parser, through a hook in the decoder's `src/obu.c`.
    - WebM / MKV / MOV: remux to MP4 first, e.g. with `ffmpeg -c copy`.
 2. **In the browser**, `grain-clip.mjs`:
    - demuxes the MP4 (`mp4-demux.mjs`);
@@ -35,7 +52,7 @@ film grain.
 | tier | when | grain | drawing |
 |---|---|---|---|
 | 1 | WebGPU | `gpu-grain.mjs` (WGSL compute) | WebGPU canvas; HDR canvas for PQ / HLG on HDR displays |
-| 2 | no WebGPU | `fg-grain.wasm` in `grain-worker.mjs` (this fork's C grain code, SIMD + threads; loaded only then) | WebGL2 |
+| 2 | no WebGPU | `fg-grain.wasm` in `grain-worker.mjs` (the decoder's C grain code, SIMD + threads; loaded only then) | WebGL2 |
 | none | no AV1 decoder (`VideoDecoder.isConfigSupported` says no) | | `createGrainClip` throws; show a message |
 
 **Full-frame grain on the GPU.**
@@ -75,25 +92,26 @@ need a secure context (https or localhost).
 ## Build
 
 ```sh
-wasm/build.sh                 # -> wasm/dist/web/: the kit + fg-grain.mjs / fg-grain.wasm (grain only, no decoder)
-DECODER=1 wasm/build.sh       # also the whole decoder as WebAssembly (dav1d-fg.wasm, the earlier player; unused now)
-NODE_CLI=1 wasm/build.sh      # also the dav1d CLI for Node.js (sh tests/fullgrain/run.sh wasm/dist/node/dav1d-node)
+browser/build.sh              # -> browser/dist/web/: the kit + fg-grain.mjs / fg-grain.wasm (grain only, no decoder)
+DECODER=1 browser/build.sh    # also the whole decoder as WebAssembly (dav1d-fg.wasm, the earlier player; unused now)
+NODE_CLI=1 browser/build.sh   # also the dav1d CLI for Node.js:
+                              #   sh decoder/dav1d/tests/fullgrain/run.sh browser/dist/node/dav1d-node
 ```
 
 `fg-grain.wasm`:
-- is linked from the same `libdav1d.a` as the decoder, with `wasm/fgjs.c`; the linker leaves the decoder out;
+- is linked from the same `libdav1d.a` as the decoder, with `browser/fgjs.c`; the linker leaves the decoder out;
 - 211 KB (86 KB gzipped) + 76 KB of JS glue.
 
-The build installs emsdk 6.0.12 into `wasm/emsdk` unless `EMSDK` points to an activated one. It needs meson and ninja.
+The build installs emsdk 6.0.12 into `browser/emsdk` unless `EMSDK` points to an activated one. It needs meson and ninja.
 
 ## Tests
 
 ```sh
-sh tests/fullgrain/strip.sh build/tools/av1grain       # strip tool: grain off == original; params + dav1d == original
-python3 wasm/test/gpu-vectors.py build/tools/av1grain /tmp/vec tests/fullgrain/*.ivf clip.mp4   # test data + hashes
-PLAYWRIGHT=/path/to/playwright-core/index.mjs node wasm/test/gpu-test.mjs /tmp/vec --mode full,standard
+sh tools/av1grain/strip.sh build/tools/av1grain/av1grain   # strip tool: grain off == original; params + dav1d == original
+python3 browser/test/gpu-vectors.py build/tools/av1grain/av1grain /tmp/vec decoder/dav1d/tests/fullgrain/*.ivf clip.mp4   # test data + hashes
+PLAYWRIGHT=/path/to/playwright-core/index.mjs node browser/test/gpu-test.mjs /tmp/vec --mode full,standard
     # [--engine wasm] [--pp low-power|swiftshader] [--page webcodecs-test.html | player-test.html]
-node wasm/test/selftest-serve.mjs /tmp/vec 8140        # selftest.html for another machine (results posted back)
+node browser/test/selftest-serve.mjs /tmp/vec 8140        # selftest.html for another machine (results posted back)
 ```
 
 - **`gpu-test.html`**: grain on the grain-free pictures (WebGPU or `--engine wasm`) vs dav1d, picture by picture
