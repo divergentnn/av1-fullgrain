@@ -27,7 +27,7 @@ if av1fg_py.found()
             link_with : [libdav1d, dav1d_input_objs],
             include_directories : [dav1d_inc_dirs],
             c_args : dav1d_c_args + ['-I' + (meson.project_source_root() / 'decoder' / 'dav1d' / 'tools')],
-            dependencies : [thread_dependency],
+            dependencies : [thread_dependency, libm_dependency],
             build_by_default : false,
             install : false,
         )
