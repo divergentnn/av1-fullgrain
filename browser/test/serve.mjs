@@ -2,7 +2,7 @@
 // with Range requests. Mounts: [[urlPrefix, directory], ...].
 //
 //   import { serve } from './serve.mjs';
-//   const srv = await serve(8131, [['/web/', 'wasm/web'], ['/test/', 'wasm/test'], ['/vec/', '/tmp/vec']]);
+//   const srv = await serve(8131, [['/web/', 'browser/web'], ['/test/', 'browser/test'], ['/vec/', '/tmp/vec']]);
 //
 // Copyright © 2026, divergentnn (av1-fullgrain). SPDX-License-Identifier: BSD-2-Clause
 import http from 'http';

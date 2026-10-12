@@ -1,58 +1,71 @@
-# dav1d-fullgrain: dav1d 1.5.4 with full-frame film grain synthesis.
+# dav1d-fullgrain: dav1d 1.5.4 with full-frame film grain synthesis, built
+# from av1-fullgrain (the decoder is its git submodule decoder/dav1d).
 # Replaces the system dav1d (same SONAME, same API), so ffmpeg, mpv and
-# everything else linked to libdav1d.so.7 use it.
+# everything else linked to libdav1d.so.7 use it. Also installs
+# av1-grain-seed and the mpv helpers (/usr/share/dav1d-fullgrain/mpv).
 #
-#   cd packaging/arch && makepkg -si          # build + install (replaces dav1d)
-#   sudo pacman -S dav1d                      # back to the stock package
+#   cd install/arch && makepkg -si          # build + install (replaces dav1d)
+#   sudo pacman -S dav1d                    # back to the stock package
 #
 # Default grain mode: full (_grain_mode below). DAV1D_GRAIN_MODE=standard at
 # runtime gives conformant AV1 grain.
 
 pkgname=dav1d-fullgrain
-pkgver=1.5.4.r6
+pkgver=1.5.4.r30
 pkgrel=1
-pkgdesc='AV1 decoder dav1d with full-frame film grain synthesis (non-conformant fork)'
+pkgdesc='AV1 decoder dav1d with full-frame film grain synthesis (non-conformant fork), and av1-grain-seed'
 arch=('x86_64' 'aarch64')
 url='https://github.com/divergentnn/av1-fullgrain'
 license=('BSD-2-Clause')
 depends=('glibc')
-makedepends=('git' 'meson' 'ninja')
+makedepends=('git' 'meson' 'ninja' 'xxhash')
 makedepends_x86_64=('nasm')
+checkdepends=('python')
 provides=('dav1d=1.5.4' 'libdav1d.so=7-64')
 conflicts=('dav1d')
-# DAV1D_FULLGRAIN_SRC overrides the source (e.g. file:///path/to/checkout)
-_src=${DAV1D_FULLGRAIN_SRC:-https://github.com/divergentnn/av1-fullgrain.git}
-_branch=${DAV1D_FULLGRAIN_BRANCH:-grain-variants}
+# Overrides, e.g. for a local checkout: AV1_FULLGRAIN_SRC=file:///path/to/av1-fullgrain,
+# DAV1D_FULLGRAIN_SRC=file:///path/to/dav1d-fullgrain, AV1_FULLGRAIN_BRANCH=main
+_src=${AV1_FULLGRAIN_SRC:-https://github.com/divergentnn/av1-fullgrain.git}
+_branch=${AV1_FULLGRAIN_BRANCH:-main}
+_decoder=${DAV1D_FULLGRAIN_SRC:-https://github.com/divergentnn/dav1d-fullgrain.git}
 _grain_mode=${DAV1D_FULLGRAIN_MODE:-full}
-source=("dav1d-fullgrain::git+${_src}#branch=${_branch}")
-sha256sums=('SKIP')
+source=("av1-fullgrain::git+${_src}#branch=${_branch}"
+        "dav1d-fullgrain::git+${_decoder}")
+sha256sums=('SKIP' 'SKIP')
+
+prepare() {
+  cd av1-fullgrain
+  # the decoder at the commit av1-fullgrain pins, from makepkg's own clone
+  git submodule init decoder/dav1d
+  git config submodule.decoder/dav1d.url "${srcdir}/dav1d-fullgrain"
+  git -c protocol.file.allow=always submodule update decoder/dav1d
+}
 
 pkgver() {
-  cd dav1d-fullgrain
-  if git describe --long --tags --match '1.*' >/dev/null 2>&1; then
-    git describe --long --tags --match '1.*' | sed -E 's/-([0-9]+)-g([0-9a-f]+)$/.r\1.g\2/'
-  else
-    printf '1.5.4.r%s.g%s' "$(git rev-list --count HEAD)" "$(git rev-parse --short=7 HEAD)"
-  fi
+  cd av1-fullgrain/decoder/dav1d
+  git describe --long --tags --match '1.*' | sed -E 's/-([0-9]+)-g([0-9a-f]+)$/.r\1.g\2/'
 }
 
 build() {
-  arch-meson dav1d-fullgrain build \
-    -Denable_tests=false \
-    -Dgrain_mode_default="${_grain_mode}"
+  arch-meson av1-fullgrain build \
+    -Ddav1d:enable_tests=false \
+    -Ddav1d:grain_mode_default="${_grain_mode}"
   meson compile -C build
 }
 
 check() {
-  cd dav1d-fullgrain
+  cd av1-fullgrain
   # every grain mode against the committed hashes, SIMD and C paths
-  DEFAULT_MODE="${_grain_mode}" sh tests/fullgrain/run.sh "${srcdir}/build/tools/dav1d"
+  DEFAULT_MODE="${_grain_mode}" sh decoder/dav1d/tests/fullgrain/run.sh "${srcdir}/build/decoder/dav1d/tools/dav1d"
+  # av1-grain-seed and av1grain
+  meson test -C "${srcdir}/build" --suite av1fg --suite av1fg-dav1d --suite av1grain --print-errorlogs
 }
 
 package() {
   meson install -C build --destdir "${pkgdir}"
-  install -Dm644 dav1d-fullgrain/COPYING -t "${pkgdir}/usr/share/licenses/${pkgname}/"
-  install -Dm644 dav1d-fullgrain/README.md -t "${pkgdir}/usr/share/doc/${pkgname}/"
-  install -Dm644 dav1d-fullgrain/contrib/mpv/grain-mode.lua -t "${pkgdir}/usr/share/${pkgname}/mpv/"
-  install -Dm644 dav1d-fullgrain/contrib/mpv/mpv.conf -t "${pkgdir}/usr/share/${pkgname}/mpv/"
+  install -Dm644 av1-fullgrain/decoder/dav1d/COPYING -t "${pkgdir}/usr/share/licenses/${pkgname}/"
+  install -Dm644 av1-fullgrain/LICENSE -t "${pkgdir}/usr/share/licenses/${pkgname}/"
+  install -Dm644 av1-fullgrain/README.md -t "${pkgdir}/usr/share/doc/${pkgname}/"
+  install -Dm644 av1-fullgrain/install/mpv/grain-mode.lua -t "${pkgdir}/usr/share/${pkgname}/mpv/"
+  install -Dm644 av1-fullgrain/install/mpv/mpv.conf -t "${pkgdir}/usr/share/${pkgname}/mpv/"
 }

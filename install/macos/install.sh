@@ -1,12 +1,12 @@
 #!/bin/sh
-# Install dav1d-fullgrain on macOS by swapping the libdav1d dylib inside
-# Homebrew's dav1d keg, so Homebrew's ffmpeg and mpv (and anything else that
-# links Homebrew's libdav1d) use it. The stock dylib is kept next to it as
-# libdav1d.7.dylib.stock.
+# Install av1-fullgrain's decoder (dav1d-fullgrain, decoder/dav1d) on macOS by
+# swapping the libdav1d dylib inside Homebrew's dav1d keg, so Homebrew's ffmpeg
+# and mpv (and anything else that links Homebrew's libdav1d) use it. The stock
+# dylib is kept next to it as libdav1d.7.dylib.stock.
 #
-#   packaging/macos/install.sh            # build, test, install (default mode: full)
-#   GRAIN_MODE=dual packaging/macos/install.sh
-#   packaging/macos/uninstall.sh          # put the stock dylib back
+#   install/macos/install.sh              # build, test, install (default mode: full)
+#   GRAIN_MODE=dual install/macos/install.sh
+#   install/macos/uninstall.sh            # put the stock dylib back
 #
 # Undone automatically by `brew upgrade dav1d` / `brew reinstall dav1d`: run
 # this script again afterwards (or `brew pin dav1d` to hold the version).
@@ -17,6 +17,12 @@ set -eu
 SRC=$(cd "$(dirname "$0")/../.." && pwd)
 BUILD="$SRC/build"
 MODE=${GRAIN_MODE:-full}
+DEC="$SRC/decoder/dav1d"
+
+if [ ! -f "$DEC/meson.build" ]; then
+    echo "==> Fetching the decoder (git submodule decoder/dav1d)"
+    git -C "$SRC" submodule update --init decoder/dav1d
+fi
 
 command -v brew >/dev/null 2>&1 || { echo "Homebrew is required (https://brew.sh)"; exit 1; }
 
@@ -45,30 +51,31 @@ case "$BREWVER" in
        fi ;;
 esac
 
-echo "==> Building dav1d-fullgrain (grain_mode_default=$MODE)"
+echo "==> Building av1-fullgrain (grain_mode_default=$MODE)"
 if [ -d "$BUILD" ]; then
-    meson setup --reconfigure "$BUILD" "$SRC" --buildtype=release -Denable_tools=true \
-        -Denable_tests=false -Dgrain_mode_default="$MODE"
+    meson setup --reconfigure "$BUILD" "$SRC" --buildtype=release \
+        -Ddav1d:enable_tools=true -Ddav1d:grain_mode_default="$MODE"
 else
-    meson setup "$BUILD" "$SRC" --buildtype=release -Denable_tools=true \
-        -Denable_tests=false -Dgrain_mode_default="$MODE"
+    meson setup "$BUILD" "$SRC" --buildtype=release \
+        -Ddav1d:enable_tools=true -Ddav1d:grain_mode_default="$MODE"
 fi
 ninja -C "$BUILD"
 
 echo "==> Testing"
-DEFAULT_MODE="$MODE" sh "$SRC/tests/fullgrain/run.sh" "$BUILD/tools/dav1d" | tail -1
+DEFAULT_MODE="$MODE" sh "$DEC/tests/fullgrain/run.sh" "$BUILD/decoder/dav1d/tools/dav1d" | tail -1
 
 echo "==> Installing into $LIBDIR"
 [ -f "$LIB.stock" ] || cp -p "$LIB" "$LIB.stock"
 NEW="$LIB.fullgrain.tmp"
-cp "$BUILD/src/libdav1d.7.dylib" "$NEW"
+cp "$BUILD/decoder/dav1d/src/libdav1d.7.dylib" "$NEW"
 chmod u+w "$NEW"
 install_name_tool -id "$(otool -D "$LIB.stock" | tail -n 1)" "$NEW"
 codesign --force --sign - "$NEW"
 mv -f "$NEW" "$LIB"
 
 echo "==> Check"
-DAV1D_GRAIN_STATS=1 "$KEG/bin/dav1d" -q -i "$SRC/tests/fullgrain/fgt16_420_10bit_odd.ivf" \
+DAV1D_GRAIN_STATS=1 "$KEG/bin/dav1d" -q -i "$DEC/tests/fullgrain/fgt16_420_10bit_odd.ivf" \
     --muxer null -o - --filmgrain 1 2>&1 | head -n 1
 echo "Done. Homebrew's ffmpeg/mpv now use dav1d-fullgrain (default mode: $MODE)."
-echo "For mpv also add contrib/mpv/mpv.conf to ~/.config/mpv/mpv.conf."
+echo "For mpv also add install/mpv/mpv.conf to ~/.config/mpv/mpv.conf."
+echo "av1-grain-seed: $BUILD/tools/av1-grain-seed/av1-grain-seed"

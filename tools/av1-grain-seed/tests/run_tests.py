@@ -4,7 +4,8 @@
     run_tests.py TOOL FIXTURES [--dav1d-check CHECK] [--extra DIR] [--update-golden]
 
 For every fixture (IVF, Section 5, Annex B, MP4, fragmented MP4, Matroska from
-ffmpeg and mkvmerge, WebM; tools/av1fg/tests/fixtures and tests/fullgrain):
+ffmpeg and mkvmerge, WebM; tools/av1-grain-seed/tests/fixtures and
+decoder/dav1d/tests/fullgrain):
   - it parses; container variants of one stream give the same frames;
   - with CHECK (libdav1d): the grain parameters of every output picture equal
     dav1d's, and the patched file decodes to identical pictures with grain

@@ -1,6 +1,6 @@
 // The browser self-test (selftest.html) for another machine, reached through an SSH tunnel:
 //
-//   node wasm/test/selftest-serve.mjs VECTOR_DIR [PORT=8140] [RESULTS_DIR=VECTOR_DIR/results]
+//   node browser/test/selftest-serve.mjs VECTOR_DIR [PORT=8140] [RESULTS_DIR=VECTOR_DIR/results]
 //   (on the other machine)  ssh -N -L 8140:127.0.0.1:8140 HOST   then open http://localhost:8140/
 //
 // localhost is a secure context (WebGPU, WebCodecs) and the server sends COOP/COEP (WebAssembly threads).

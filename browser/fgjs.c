@@ -2,7 +2,7 @@
  * av1-fullgrain for WebAssembly, grain only: the fork's film grain synthesis
  * (full-frame and standard AV1 grain, src/fg_*.c and src/filmgrain_tmpl.c)
  * applied to pictures that the browser decoded without grain. No decoder.
- * The player uses it where WebGPU is missing (wasm/web/grain-worker.mjs);
+ * The player uses it where WebGPU is missing (browser/web/grain-worker.mjs);
  * the output is bit-identical to native dav1d and to the WebGPU shaders.
  *
  *   fgjs *f = fgjs_open(threads);

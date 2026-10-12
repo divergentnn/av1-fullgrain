@@ -1,7 +1,8 @@
 #!/bin/sh
-# av1grain strip checks (tools/av1grain.c), on every test stream:
+# av1grain strip checks (tools/av1grain/av1grain.c), on every test stream of
+# the decoder (decoder/dav1d/tests/fullgrain, or STREAM_DIR):
 #
-#   tests/fullgrain/strip.sh BUILD/tools/av1grain
+#   sh tools/av1grain/strip.sh build/tools/av1grain/av1grain [STREAM_DIR]
 #
 # 1. the stripped stream, decoded with grain off, is md5-identical to the
 #    original decoded with grain off (only the grain syntax changed);
@@ -11,7 +12,7 @@
 #    with grain, in both modes.
 set -u
 AG=$1
-DIR=$(cd "$(dirname "$0")" && pwd)
+DIR=${2:-$(cd "$(dirname "$0")/../../decoder/dav1d/tests/fullgrain" && pwd)}
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 unset DAV1D_GRAIN_MODE DAV1D_GRAIN_SIMD DAV1D_GRAIN_MODE_FILE DAV1D_GRAIN_STATS DAV1D_GRAIN_FORCE

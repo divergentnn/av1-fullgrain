@@ -1,6 +1,6 @@
 // av1-fullgrain: film grain parameters for the GPU grain renderer (gpu-grain.mjs).
 //
-// PARAMS.json is written by tools/av1grain.c (strip): the grain dav1d applied
+// PARAMS.json is written by tools/av1grain/av1grain.c (strip): the grain dav1d applied
 // to each output picture of a stream, which the grain-free copy of that stream
 // no longer carries. This module turns one picture's parameters into the
 // tables the shaders use, with the same integer arithmetic as dav1d:
@@ -156,7 +156,7 @@ export function loadParams(json) {
   });
 }
 
-/** a picture's parameters as the int32 block fgjs_apply() (wasm/fgjs.c) reads */
+/** a picture's parameters as the int32 block fgjs_apply() (browser/fgjs.c) reads */
 export function paramsInt32(pic) {
   const a = new Int32Array(165);
   let k = 0;

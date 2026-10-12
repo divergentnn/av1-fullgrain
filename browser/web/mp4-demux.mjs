@@ -1,7 +1,7 @@
 // A minimal MP4 demuxer for the AV1 player: the first AV1 track's samples
 // (offset, size, timestamps, sync flag), its av1C, colour box and the
 // WebCodecs codec string. Non-fragmented MP4 only (what ffmpeg -c copy and
-// tools/av1grain_mp4.py write).
+// tools/av1grain/av1grain_mp4.py write).
 //
 // Copyright © 2026, divergentnn (av1-fullgrain). SPDX-License-Identifier: BSD-2-Clause
 

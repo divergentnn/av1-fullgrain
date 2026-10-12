@@ -3,10 +3,10 @@
 
     av1grain_mp4.py IN.mp4 OUT.mp4 PARAMS.json [--verify] [--av1grain PATH] [--threads N]
 
-OUT.mp4 is IN.mp4 with every AV1 frame header's film grain syntax replaced by apply_grain = 0 (tools/av1grain.c
+OUT.mp4 is IN.mp4 with every AV1 frame header's film grain syntax replaced by apply_grain = 0 (tools/av1grain/av1grain.c
 strip, on dav1d's own parser). Every other box, track and sample is copied byte for byte; only the AV1 samples'
 sizes and the chunk offsets change. PARAMS.json lists the grain dav1d applied to each picture, in sample order
-(see tools/av1grain.c), plus the SHA-256 of both files.
+(see tools/av1grain/av1grain.c), plus the SHA-256 of both files.
 
 --verify decodes both files with dav1d and checks that the grain-free copy with PARAMS.json applied is identical
 to the original in full-frame and standard grain, and with grain off (6 decodes).

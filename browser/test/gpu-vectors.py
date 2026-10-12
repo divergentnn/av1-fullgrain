@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Test data for the browser grain checks (wasm/test/gpu-test.mjs).
+"""Test data for the browser grain checks (browser/test/gpu-test.mjs).
 
     gpu-vectors.py AV1GRAIN OUTDIR INPUT.ivf|INPUT.mp4 ... [--frames N] [--threads N]
 

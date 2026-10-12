@@ -1,5 +1,5 @@
 #!/bin/sh
-# Put Homebrew's stock libdav1d back (undo packaging/macos/install.sh).
+# Put Homebrew's stock libdav1d back (undo install/macos/install.sh).
 set -eu
 command -v brew >/dev/null 2>&1 || { echo "Homebrew is required"; exit 1; }
 LIBDIR=$(cd "$(brew --prefix dav1d)/lib" && pwd -P)

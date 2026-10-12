@@ -1,6 +1,6 @@
 // av1-fullgrain: the CPU grain worker (module Worker). Applies full-frame or
 // standard AV1 grain with fg-grain.wasm (the fork's grain code, WebAssembly
-// SIMD + threads; wasm/fgjs.c) to pictures the browser decoded without grain.
+// SIMD + threads; browser/fgjs.c) to pictures the browser decoded without grain.
 // Used where WebGPU is missing. Needs a cross-origin isolated page (threads).
 //
 // in:  {type: 'open', threads}

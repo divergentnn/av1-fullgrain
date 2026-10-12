@@ -2,7 +2,7 @@
 """Serve a directory with the headers the WebAssembly player needs
 (cross-origin isolation for SharedArrayBuffer threads).
 
-    python3 wasm/web/serve.py [DIR] [PORT]     # default: wasm/dist/web on 8077
+    python3 browser/web/serve.py [DIR] [PORT]     # default: browser/dist/web on 8077
 """
 import sys
 from functools import partial

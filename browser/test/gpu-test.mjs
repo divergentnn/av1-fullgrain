@@ -1,10 +1,10 @@
 // Headless Chromium run of gpu-test.html: GPU grain == dav1d, picture by picture.
 //
-//   PLAYWRIGHT=.../node_modules/playwright-core/index.mjs node wasm/test/gpu-test.mjs VECTOR_DIR \
+//   PLAYWRIGHT=.../node_modules/playwright-core/index.mjs node browser/test/gpu-test.mjs VECTOR_DIR \
 //       [--mode full,standard] [--pp high-performance|low-power|swiftshader] [--only a,b] [--frames N] [--reps N]
-//       [--page webcodecs-test.html [--hw prefer-software]] [--engine wasm]   (wasm: fg-grain.wasm from wasm/dist)
+//       [--page webcodecs-test.html [--hw prefer-software]] [--engine wasm]   (wasm: fg-grain.wasm from browser/dist)
 //
-// VECTOR_DIR comes from wasm/test/gpu-vectors.py. WebGPU in headless Chromium on Linux needs Vulkan
+// VECTOR_DIR comes from browser/test/gpu-vectors.py. WebGPU in headless Chromium on Linux needs Vulkan
 // (--enable-unsafe-webgpu --enable-features=Vulkan --use-angle=vulkan); --pp swiftshader uses the CPU.
 // Exit status 0 when every picture is identical.
 //

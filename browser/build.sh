@@ -1,20 +1,22 @@
 #!/bin/sh
-# Build av1-fullgrain's browser kit (WebAssembly SIMD128 + threads).
+# Build av1-fullgrain's browser kit (WebAssembly SIMD128 + threads) from the
+# decoder in decoder/dav1d (git submodule update --init, if it is empty).
 #
-#   wasm/build.sh                 -> wasm/dist/web/: the player kit. The browser decodes the grain-free AV1
+#   browser/build.sh              -> browser/dist/web/: the player kit. The browser decodes the grain-free AV1
 #                                    (WebCodecs) and the grain is drawn with WebGPU (gpu-grain.mjs) or, without
 #                                    WebGPU, by fg-grain.wasm: the fork's grain code alone, no decoder
-#   DECODER=1 wasm/build.sh       -> also wasm/dist/dav1d-fg.mjs + .wasm, the whole decoder (the old WASM player,
-#                                    no longer used by the kit)
-#   NODE_CLI=1 wasm/build.sh      -> also wasm/dist/node/dav1d.js, the dav1d CLI for Node.js
-#                                    (sh tests/fullgrain/run.sh wasm/dist/node/dav1d-node)
+#   DECODER=1 browser/build.sh    -> also browser/dist/dav1d-fg.mjs + .wasm, the whole decoder (the old WASM
+#                                    player, no longer used by the kit)
+#   NODE_CLI=1 browser/build.sh   -> also browser/dist/node/dav1d.js, the dav1d CLI for Node.js
+#                                    (sh decoder/dav1d/tests/fullgrain/run.sh browser/dist/node/dav1d-node)
 #
 # Needs emsdk. With EMSDK set (an activated emsdk), that one is used; otherwise
-# emsdk is cloned into wasm/emsdk and EMSDK_VERSION is installed there.
+# emsdk is cloned into browser/emsdk and EMSDK_VERSION is installed there.
 # Also needs meson and ninja.
 set -eu
 HERE=$(cd "$(dirname "$0")" && pwd)
-SRC=$(dirname "$HERE")
+SRC=$(dirname "$HERE")/decoder/dav1d
+[ -f "$SRC/meson.build" ] || { echo "decoder/dav1d is empty: run git submodule update --init" >&2; exit 1; }
 OUT="$HERE/dist"
 BUILD="$HERE/build"
 EMSDK_VERSION=${EMSDK_VERSION:-6.0.12}
@@ -97,7 +99,7 @@ mkdir -p "$OUT/web"
 cp "$OUT/fg-grain.mjs" "$OUT/fg-grain.wasm" "$HERE"/web/*.mjs "$HERE/web/demo.html" "$OUT/web/"
 echo "player kit: $OUT/web (python3 $HERE/web/serve.py, then /demo.html)"
 
-# 4. optional: the dav1d CLI for Node.js (runs tests/fullgrain/run.sh)
+# 4. optional: the dav1d CLI for Node.js (runs decoder/dav1d/tests/fullgrain/run.sh)
 if [ "${NODE_CLI:-0}" = 1 ]; then
     cat > "$BUILD/wasm32-node.meson" <<'EOF'
 [binaries]

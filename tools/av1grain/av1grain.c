@@ -28,7 +28,7 @@
  *   PARAMS.json to a stream that has none (a stripped one), with the dav1d
  *   synthesis selected by --grain (full = this fork's full-frame grain).
  *
- * IVF in and out (the MP4 wrapper is tools/av1grain_mp4.py). --config feeds
+ * IVF in and out (the MP4 wrapper is tools/av1grain/av1grain_mp4.py). --config feeds
  * a sequence header (an MP4's av1C configOBUs) before the first frame; strip
  * does not copy it into OUT.
  *

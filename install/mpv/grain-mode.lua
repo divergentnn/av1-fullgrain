@@ -1,7 +1,7 @@
 -- Live A/B of dav1d-fullgrain's synthesis modes inside mpv.
 --
 -- The decoder re-reads the file named by DAV1D_GRAIN_MODE_FILE every 100 ms;
--- this script writes it. contrib/mpv/mpv-fullgrain sets everything up; with
+-- this script writes it. install/mpv/mpv-fullgrain sets everything up; with
 -- the fork installed system-wide, export DAV1D_GRAIN_MODE_FILE (any writable
 -- path) before starting mpv and load this script (--script=... or copy it to
 -- ~/.config/mpv/scripts/).
