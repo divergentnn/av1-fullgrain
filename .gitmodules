@@ -1,0 +1,4 @@
+[submodule "decoder/dav1d"]
+	path = decoder/dav1d
+	url = https://github.com/divergentnn/dav1d-fullgrain.git
+	branch = grain-variants
