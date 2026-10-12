@@ -59,7 +59,7 @@ See the [browser player](../../browser/README.md).
 
 - `av1-grain-seed` builds with Visual Studio (MSVC): see
   [its guide](../../tools/av1-grain-seed/README.md#install).
-- The decoder builds with MSYS2's GCC, not with MSVC: see
+- The decoder builds with MSYS2's GCC (MSVC not tried): see
   [Windows](../windows/README.md) (untested outside CI).
 
 ## Tested

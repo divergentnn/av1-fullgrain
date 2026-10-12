@@ -70,8 +70,9 @@ Two different checksums mean the decoder is active.
 reinstall MSYS2's package with `pacman -S mingw-w64-ucrt-x86_64-dav1d`. An
 MSYS2 update of dav1d also puts the stock library back.
 
-**Visual Studio (MSVC)** can't build the decoder: the full-frame grain's
-AVX2 code uses GCC and Clang syntax. Use MSYS2's GCC as above.
+**Visual Studio (MSVC)** has not been tried for the decoder. The full-frame
+grain's AVX2 code uses GCC/Clang target attributes, so it probably needs changes
+first. Use MSYS2's GCC as above.
 
 ## Tested
 

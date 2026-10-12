@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 # Build av1-fullgrain's browser kit (WebAssembly SIMD128 + threads) from the
 # decoder in decoder/dav1d (git submodule update --init, if it is empty).
 #
@@ -33,6 +33,8 @@ if [ -z "${EMSDK:-}" ]; then
 fi
 # shellcheck disable=SC1091
 . "$EMSDK/emsdk_env.sh" >/dev/null 2>&1
+# emsdk_env.sh needs bash to find itself; make sure emcc is on PATH either way
+command -v emcc >/dev/null 2>&1 || export PATH="$EMSDK:$EMSDK/upstream/emscripten:$PATH"
 emcc --version | head -n 1
 
 mkdir -p "$BUILD" "$OUT"

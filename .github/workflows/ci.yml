@@ -87,7 +87,7 @@ jobs:
           sudo apt-get install -y meson ninja-build
 
       - name: Build (emsdk, grain module, player kit, Node.js dav1d CLI)
-        run: NODE_CLI=1 sh browser/build.sh
+        run: NODE_CLI=1 bash browser/build.sh
 
       - name: Decoder grain tests on the WebAssembly build
         run: |
@@ -149,8 +149,9 @@ jobs:
           meson setup build decoder/dav1d --buildtype=release
           ninja -C build
           ls build/src/*.dll
-          build/tools/dav1d.exe --version
+          # dav1d.exe needs libdav1d.dll next to it or on PATH
+          PATH="$PWD/build/src:$PATH" build/tools/dav1d.exe --version
 
       - name: Decoder grain tests
         shell: msys2 {0}
-        run: sh decoder/dav1d/tests/fullgrain/run.sh build/tools/dav1d.exe
+        run: PATH="$PWD/build/src:$PATH" sh decoder/dav1d/tests/fullgrain/run.sh build/tools/dav1d.exe
