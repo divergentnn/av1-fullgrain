@@ -1,7 +1,7 @@
 //! The integer tables of AV1 film grain, as dav1d computes them on the CPU for the shaders.
 //!
 //! Copyright © 2026, divergentnn (av1-fullgrain). SPDX-License-Identifier: BSD-2-Clause
-//! GAUSSIAN_SEQUENCE: the AV1 specification's gaussian_sequence (dav1d's src/tables.c).
+//! Ported from dav1d (src/tables.c, src/fg_apply_tmpl.c; © VideoLAN and the dav1d authors, BSD-2-Clause).
 
 use crate::params::FilmGrainParams;
 

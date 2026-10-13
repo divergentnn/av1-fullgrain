@@ -9,6 +9,12 @@ A player shows full-frame grain when both of these are true:
    [macOS](../macos/README.md)). Players that bring their own copy of dav1d
    are not affected.
 
+> [!IMPORTANT]
+> **Judge AV1 film grain only with full-frame grain.** Standard players tile one small grain patch over the picture;
+> the repeating pattern is the player's, not the encode's. Before comparing or judging, pause on a flat area and check
+> that the grain looks random everywhere, with no repeating texture. More in [install/gpu](../gpu/README.md), which
+> also lists the ways to get full-frame grain with hardware decoding.
+
 None of the players below has been tested with the decoder. Where a step
 says a player uses the system's dav1d, that was read from how it is built or
 checked with `ldd`, not by watching a film.

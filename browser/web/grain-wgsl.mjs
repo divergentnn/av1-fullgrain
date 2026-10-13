@@ -29,6 +29,7 @@ export const WGSL = `// av1-fullgrain: AV1 film grain drawn on the GPU (WGSL com
 // the Rust crate checks its copies against them in a test): keep that form.
 //
 // Copyright © 2026, divergentnn (av1-fullgrain). SPDX-License-Identifier: BSD-2-Clause
+// Ported from dav1d's C code (© VideoLAN and the dav1d authors, BSD-2-Clause) and av1-fullgrain's full-frame grain.
 
 const ROWS = 144;      // rows of one band group: 16 warm-up + 4 x 32
 const S = 4;           // columns per wavefront step

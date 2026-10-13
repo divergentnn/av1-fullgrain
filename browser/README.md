@@ -55,6 +55,10 @@ viewer, uses this kit for AV1 clips with film grain.
 | 2 | no WebGPU | `fg-grain.wasm` in `grain-worker.mjs` (the decoder's C grain code, SIMD + threads; loaded only then) | WebGL2 |
 | none | no AV1 decoder (`VideoDecoder.isConfigSupported` says no) | | `createGrainClip` throws; show a message |
 
+The shaders are shared with the native [GPU renderer](../gpu/README.md): `web/grain-wgsl.mjs` is generated from
+`gpu/src/grain.wgsl` by `browser/sync-wgsl.sh` (run it after editing the shader; `cargo test` in `gpu/` fails while
+the two differ).
+
 **Full-frame grain on the GPU.**
 - One workgroup per band group (16 warm-up rows + 4 x 32 rows, exactly where the C code restarts the recursion) and
   plane, one thread per row.

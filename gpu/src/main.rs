@@ -446,11 +446,12 @@ impl GrainFree {
         self.n += 1;
         // showinfo logged picture n before ffmpeg wrote it
         while !self.pending.contains_key(&n) {
-            match self.grain.recv() {
+            // ffmpeg logged picture n before writing it; a long wait means the pictures are not the size we read
+            match self.grain.recv_timeout(std::time::Duration::from_secs(120)) {
                 Ok((k, g)) => {
                     self.pending.insert(k, g);
                 }
-                Err(_) => bail!("ffmpeg: no showinfo line for picture {n}"),
+                Err(_) => bail!("ffmpeg: no showinfo line for picture {n} (picture size not as probed?)"),
             }
         }
         Ok(Some(self.pending.remove(&n).unwrap()))
@@ -551,7 +552,7 @@ fn decode(input: &Path, output: &Path, mode: GrainMode, raw: bool, ss: Option<&s
     })?;
     out.flush()?;
     src.finish()?;
-    let with = grain_log.iter().filter(|g| g.is_some()).count();
+    let with = grain_log.iter().filter(|g| g.is_some_and(|g| g.has_grain())).count();
     eprintln!("av1-fullgrain-gpu: {n} pictures ({with} with grain) in {:.1} s", t0.elapsed().as_secs_f64());
     if let Some(p) = params_out {
         std::fs::write(p, params_json(&f, &grain_log))?;

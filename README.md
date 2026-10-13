@@ -42,6 +42,7 @@ usual ([more below](#comparison)).*
 | [browser/](browser/README.md) | **A player for web pages.** The browser decodes the video and the grain is drawn on top, on the GPU or in WebAssembly, identical to the decoder's. |
 | [tools/av1-grain-seed](tools/av1-grain-seed/README.md) | **The seed fixer**, for the standard grain of existing files. |
 | [tools/av1grain](tools/av1grain/README.md) | Makes the grain-free copy and grain file that the browser player needs. |
+| [gpu/](gpu/README.md) | **The GPU renderer**: full-frame grain drawn on the GPU (Vulkan, Metal, DX12) after any decoder, hardware decoders included. A command line tool, and libraries for C and Rust. Same pictures as the decoder, bit for bit. |
 | [install/](#install) | Install guides for each system and player. |
 
 Planned, not written yet: full-frame grain on the GPU inside mpv (libplacebo).
@@ -231,6 +232,7 @@ dav1d. Apps that bring their own copy of dav1d are not affected.
 | **IINA** (macOS) | [install/iina](install/iina/README.md) | not supported: IINA brings its own dav1d |
 | **VLC, Kodi** and other players | [install/players](install/players/README.md) | no; depends on how the player was built |
 | mpv and ffmpeg on **Windows** | [install/windows](install/windows/README.md) | **no, untested** |
+| **any decoder, hardware decoding included**: the GPU renderer, its command line tool and libraries; where each way fits | [install/gpu](install/gpu/README.md) | Linux, NVIDIA and AMD GPUs (Vulkan); macOS and Windows untested |
 | **web pages** (the browser player) | [browser](browser/README.md) | Chrome on Linux and macOS: NVIDIA, AMD and Apple GPUs |
 | **every player**, by fixing the grain seeds in a file | [tools/av1-grain-seed](tools/av1-grain-seed/README.md) | Linux, macOS, Windows (CI) |
 | building everything **from source** | [install/source](install/source/README.md) | CI: Linux, macOS, Windows |

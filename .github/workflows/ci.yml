@@ -155,3 +155,34 @@ jobs:
       - name: Decoder grain tests
         shell: msys2 {0}
         run: PATH="$PWD/build/src:$PATH" sh decoder/dav1d/tests/fullgrain/run.sh build/tools/dav1d.exe
+
+  # gpu/: the GPU renderer on a CPU Vulkan driver (Mesa's lavapipe), checked picture by picture against the decoder
+  # built from the submodule; unit tests also check that browser/web/grain-wgsl.mjs matches gpu/src/grain.wgsl
+  gpu-renderer:
+    name: GPU renderer (Linux, lavapipe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y meson ninja-build nasm ffmpeg aom-tools mesa-vulkan-drivers libvulkan1
+
+      - name: Build the decoder and the renderer
+        run: |
+          meson setup build
+          ninja -C build
+          cd gpu && cargo build --release && cargo test --release
+
+      - name: Exactness against the decoder
+        env:
+          WGPU_BACKEND: vulkan
+        run: |
+          gpu/target/release/av1-fullgrain-gpu adapters
+          gpu/tests/make-vectors.sh /tmp/vec 6
+          gpu/target/release/av1-fullgrain-gpu check --dav1d build/decoder/dav1d/tools/dav1d \
+              --av1grain build/tools/av1grain/av1grain --threads 2 \
+              decoder/dav1d/tests/fullgrain/*.ivf /tmp/vec/*.ivf

@@ -5,6 +5,12 @@ First install the decoder for your system: [Arch](../arch/README.md),
 [Windows](../windows/README.md) (untested). mpv then uses it whenever dav1d
 decodes the AV1. Two settings decide whether it does.
 
+> [!IMPORTANT]
+> **Judge AV1 film grain only with full-frame grain.** Standard players tile one small grain patch over the picture;
+> the repeating pattern is the player's, not the encode's. Before comparing or judging, pause on a flat area and check
+> that the grain looks random everywhere, with no repeating texture. More in [install/gpu](../gpu/README.md), which
+> also lists the ways to get full-frame grain with hardware decoding.
+
 ## Hardware decoding: one line
 
 With hardware decoding, dav1d isn't used at all. That applies to Macs with
@@ -19,6 +25,9 @@ hwdec-codecs=h264,vc1,hevc,vp8,vp9,prores,prores_raw,ffv1,dpx
 
 That list is mpv 0.41's default without `av1`. The same file is
 [mpv.conf](mpv.conf) here.
+
+**Hardware decoding with full-frame grain:** the [GPU renderer](../../gpu/README.md) draws the grain after any
+decoder; `av1-fullgrain-gpu decode --hwaccel cuda FILE | mpv --audio-file=FILE -` plays a clip that way (no seeking).
 
 ## Grain on the GPU: nothing to do
 
