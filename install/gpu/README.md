@@ -31,7 +31,9 @@ This page lists where each one fits, what works today, and what could be built.
 | web pages | the [browser player](../../browser/README.md): WebCodecs + WebGPU, same shaders | yes (the browser's decoder) | works |
 | TVs, phones, streaming boxes | none: their decoders draw standard grain; [av1-grain-seed](../../tools/av1-grain-seed/README.md) replaces unlucky seeds | | standard grain only |
 
-For `decode`, ffmpeg needs libdav1d (any version) for software decoding, or a hardware AV1 decoder. With an
+For `decode`, ffmpeg needs libdav1d for software decoding, or a hardware AV1 decoder. ffmpeg 5.1 or newer works
+(`-fps_mode`): with ffmpeg 7.0 and newer the grain parameters come from ffmpeg's side data,
+with older versions from the AV1 bitstream. With an
 av1-fullgrain decoder installed as the system's dav1d, `av1-fullgrain-gpu` sets `DAV1D_GRAIN_FORCE=0` for its ffmpeg,
 so the decoder leaves the grain to the renderer.
 

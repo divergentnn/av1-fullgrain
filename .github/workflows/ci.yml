@@ -180,7 +180,9 @@ jobs:
       - name: Exactness against the decoder
         env:
           WGPU_BACKEND: vulkan
+          RUST_BACKTRACE: 1
         run: |
+          set -x
           gpu/target/release/av1-fullgrain-gpu adapters
           gpu/tests/make-vectors.sh /tmp/vec 6
           gpu/target/release/av1-fullgrain-gpu check --dav1d build/decoder/dav1d/tools/dav1d \

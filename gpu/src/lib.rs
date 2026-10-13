@@ -24,6 +24,7 @@
 //! Copyright © 2026, divergentnn (av1-fullgrain). SPDX-License-Identifier: BSD-2-Clause
 
 pub mod capi;
+pub mod obu;
 mod gpu;
 pub mod params;
 pub mod tables;

@@ -46,6 +46,14 @@ passes its parameters along with each picture. `av1-fullgrain-gpu` reads them, d
 pictures at their own bit depth (y4m, or raw planes with `--raw`). `--params-out FILE` also writes the grain of every
 picture as a [PARAMS.json](../tools/av1grain/README.md). Video only: audio and subtitles stay in the original file.
 
+Where the parameters come from (`--params-from`):
+- `showinfo`: ffmpeg's side data, as its `showinfo` filter prints it. ffmpeg 7.0 and newer print all of it; older
+  versions print only the seed.
+- `bitstream`: the AV1 frame headers, read by the crate's own header parser (a second ffmpeg remuxes the video to
+  IVF for it). Works with any ffmpeg; every picture's seed is checked against the decoder's, so the two can't drift
+  apart. `--ss` needs `showinfo`.
+- `auto` (default): `showinfo` with ffmpeg 7.0 or newer, else `bitstream`.
+
 **`render`** adds grain to grain-free y4m. The grain comes from a PARAMS.json (`av1grain strip`, or `decode
 --params-out`), or from an ffmpeg log of the `showinfo` filter on the grain-free decode:
 
@@ -81,7 +89,8 @@ r.render(&format, &planes, grain, GrainMode::Full, &mut out)?;      // or submit
 ```
 
 `FilmGrainParams` has the layout of dav1d's `Dav1dFilmGrainData`. `ParamsFile` reads a PARAMS.json;
-`parse_showinfo_line` reads ffmpeg's side data as `showinfo` prints it.
+`parse_showinfo_line` reads ffmpeg's side data as `showinfo` prints it; `obu::Av1Parser` reads the grain of each shown
+frame from the AV1 bitstream, one temporal unit at a time (`obu::IvfReader` for IVF).
 
 C, with libdav1d decoding (`apply_grain = 0`):
 
@@ -127,7 +136,11 @@ Every picture identical, full-frame and standard grain:
 | libaom's conformance streams `av1-1-b8-23-film_grain-50`, `av1-1-b10-23-film_grain-50` | | 20 / 20 | 20 / 20 |
 | films: 4K HDR PQ 10-bit (two), 1080p SDR 10-bit (two), 3584x2160 10-bit | SVT-AV1 film grain encodes, 48 pictures each | 240 / 240 | 48 / 48 (two films, 24 each) |
 
-Counts are per grain mode. The same with **hardware decoding** (`--hwaccel cuda`, NVDEC): the grain-free pictures equal
+Counts are per grain mode, with the parameters from showinfo (ffmpeg 9.0) and again from the bitstream parser: identical
+either way. The parser itself gives the same parameters as dav1d's own frame header parser (`av1grain strip`) on 55
+streams, 1,774 pictures (`AV1FG_TEST_PARAMS=DIR cargo test`, DIR holding `name.ivf` + `name.json` pairs). CI checks the
+decoder's test streams and the synthetic ones on Mesa's CPU Vulkan driver (lavapipe), with Ubuntu 24.04's ffmpeg 6.1,
+so through the bitstream parser. The same with **hardware decoding** (`--hwaccel cuda`, NVDEC): the grain-free pictures equal
 dav1d's, and the GPU grain equals dav1d's full-frame grain, on the 4K HDR and 1080p films and four synthetic streams.
 The browser kit, now on the same shader file, still matches dav1d on every picture in Chromium (WebGPU on Vulkan,
 NVIDIA).

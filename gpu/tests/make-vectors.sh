@@ -63,14 +63,24 @@ E 3333334 9999999999 1 777 1
 	cCb 1 -1 2 -1 1 -2 3 -2 4 -2 5 9 -20
 	cCr 1 -1 2 -1 1 -2 3 -2 4 -2 5 9 -18
 TBL
-aom table_420_10 s420_10 10 --film-grain-table=table.txt
-aom table_420_8 s420_8 8 --film-grain-table=table.txt
+# some libaom versions (Ubuntu 24.04's 3.8.2) abort on the update = 0 entry: then the table without it
+awk '/^E 1666667 /{skip=1} /^E 3333334 /{skip=0} !skip' table.txt | sed 's/^E 3333334 /E 1666667 /' > table-noinherit.txt
+aomt() { # out src bitdepth extra...
+    o=$1
+    if ! aom "$@" --film-grain-table=table.txt; then
+        rm -f "$o.ivf"
+        echo "note: this aomenc fails on update_grain = 0 in a grain table; $o uses the table without it" >&2
+        aom "$@" --film-grain-table=table-noinherit.txt
+    fi
+}
+aomt table_420_10 s420_10 10
+aomt table_420_8 s420_8 8
 
 # HDR: PQ / BT.2020 tags, 10 bit
 aom hdr_pq_420_10 s420_10 10 --film-grain-test=1 --color-primaries=bt2020 --transfer-characteristics=smpte2084 \
     --matrix-coefficients=bt2020ncl
-aom hdr_pq_table_420_10 s420_10 10 --film-grain-table=table.txt --color-primaries=bt2020 \
-    --transfer-characteristics=smpte2084 --matrix-coefficients=bt2020ncl
+aomt hdr_pq_table_420_10 s420_10 10 --color-primaries=bt2020 --transfer-characteristics=smpte2084 \
+    --matrix-coefficients=bt2020ncl
 
 # identity matrix (RGB-like 4:4:4) with restricted-range clipping (test vector 3 clips), and monochrome
 aom ident_444_8 s444_8 8 --profile=1 --i444 --film-grain-test=3 --matrix-coefficients=identity
