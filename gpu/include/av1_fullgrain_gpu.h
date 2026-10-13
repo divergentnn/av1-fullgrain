@@ -13,6 +13,20 @@
  * An av1-fullgrain libdav1d installed as the system's one draws its own grain even with
  * apply_grain = 0 unless DAV1D_GRAIN_FORCE=0 is set in the environment.
  *
+ * Safety contract (the library checks what it can and returns -1 with av1fg_last_error otherwise):
+ * - Threads: one AV1FGRenderer must not be used by two threads at the same time; give each thread its own,
+ *   or lock around the calls. A renderer may move between threads. Separate renderers are independent.
+ * - Planes: data[i] points to the first byte of the top row; stride[i] > 0 and at least width x bytes per
+ *   sample; each plane spans stride * (rows - 1) + one row of bytes (rows: height, or the chroma height).
+ *   Above 8 bits, samples are 16-bit little endian. Only data[0] is used for 4:0:0.
+ * - Lifetimes: input planes and grain data are read during av1fg_submit / av1fg_render only (copied to the
+ *   GPU); output planes are written during av1fg_receive / av1fg_render only. Nothing is kept afterwards.
+ * - Output planes must not overlap each other (checked). Input and output may be the same memory.
+ * - av1fg_receive's picture must have the queued picture's width, height, bit depth and layout (checked;
+ *   on a mismatch the picture stays queued).
+ * - Strings: av1fg_last_error and av1fg_adapter_name stay valid until the next call with that renderer or
+ *   av1fg_close; av1fg_version is static. err in av1fg_open receives a NUL-terminated message.
+ *
  * Copyright © 2026, divergentnn (av1-fullgrain). SPDX-License-Identifier: BSD-2-Clause
  */
 #ifndef AV1_FULLGRAIN_GPU_H
@@ -74,7 +88,8 @@ const char *av1fg_adapter_name(const AV1FGRenderer *r);
 const char *av1fg_last_error(const AV1FGRenderer *r);
 const char *av1fg_version(void);
 
-/* One picture, synchronously. grain NULL: no grain (the picture is copied). 0 or -1. */
+/* One picture, synchronously. grain NULL: no grain (the picture is copied). 0 or -1. in and out may be the
+ * same buffers. */
 int av1fg_render(AV1FGRenderer *r, const AV1FGPicture *in, const AV1FGFilmGrainData *grain, int mode,
                  const AV1FGPicture *out);
 

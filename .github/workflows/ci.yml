@@ -188,3 +188,21 @@ jobs:
           gpu/target/release/av1-fullgrain-gpu check --dav1d build/decoder/dav1d/tools/dav1d \
               --av1grain build/tools/av1grain/av1grain --threads 2 \
               decoder/dav1d/tests/fullgrain/*.ivf /tmp/vec/*.ivf
+          # this ffmpeg (6.1) prints only the seed: showinfo parameters must fail at the first picture, not at the end
+          if gpu/target/release/av1-fullgrain-gpu decode --params-from showinfo -o /tmp/x.y4m \
+              decoder/dav1d/tests/fullgrain/fgt15_420_10bit_csfl.ivf 2> /tmp/err.txt; then exit 1; fi
+          cat /tmp/err.txt
+          grep -q "picture 0: film grain side data" /tmp/err.txt
+
+      - name: Bitstream parser against dav1d's (av1grain strip), and fuzzed
+        run: |
+          set -x
+          mkdir -p /tmp/pairs
+          for f in decoder/dav1d/tests/fullgrain/*.ivf /tmp/vec/*.ivf; do
+            n=$(basename "$f" .ivf)
+            cp "$f" "/tmp/pairs/$n.ivf"
+            build/tools/av1grain/av1grain strip "$f" /tmp/nograin.ivf "/tmp/pairs/$n.json"
+          done
+          cd gpu
+          AV1FG_TEST_PARAMS=/tmp/pairs cargo test --release -- --ignored
+          AV1FG_FUZZ_ITERS=20000 cargo test fuzz_headers

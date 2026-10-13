@@ -52,7 +52,10 @@ Where the parameters come from (`--params-from`):
 - `bitstream`: the AV1 frame headers, read by the crate's own header parser (a second ffmpeg remuxes the video to
   IVF for it). Works with any ffmpeg; every picture's seed is checked against the decoder's, so the two can't drift
   apart. `--ss` needs `showinfo`.
-- `auto` (default): `showinfo` with ffmpeg 7.0 or newer, else `bitstream`.
+- `auto` (default): `bitstream` with `--hwaccel` or with ffmpeg before 7.0, else `showinfo`. With `--hwaccel` and an
+  explicit `showinfo`, the side data is also compared with the bitstream, picture by picture.
+
+A picture whose parameters can't be read stops `decode` at that picture.
 
 **`render`** adds grain to grain-free y4m. The grain comes from a PARAMS.json (`av1grain strip`, or `decode
 --params-out`), or from an ffmpeg log of the `showinfo` filter on the grain-free decode:
@@ -104,12 +107,13 @@ av1fg_render(r, &in, (const AV1FGFilmGrainData *) g, AV1FG_MODE_FULL, &out);
 ```
 
 The whole program is [examples/dav1d_gpu_grain.c](examples/dav1d_gpu_grain.c). `av1fg_submit` / `av1fg_receive`
-keep several pictures in flight.
+keep several pictures in flight. The header states the safety contract: one thread at a time per renderer, positive
+strides, output planes that don't overlap, and what stays valid for how long.
 
 **Where the parameters come from matters in one case:** ffmpeg's own AV1 decoder (the one `-hwaccel` uses) exports
 the chroma multipliers and offsets as coded, without removing their offsets (`uv_mult` 128 means 0); libdav1d exports
-dav1d's signed values. `decode --hwaccel` corrects this (`SideDataFrom::FfmpegAv1` in the library). Seen in ffmpeg
-9.0.
+dav1d's signed values. Seen in ffmpeg 9.0. `decode --hwaccel` therefore reads the bitstream (or, with an explicit
+`--params-from showinfo`, corrects the offsets with `SideDataFrom::FfmpegAv1` and compares with the bitstream).
 
 ## Exactness
 
@@ -138,10 +142,14 @@ Every picture identical, full-frame and standard grain:
 
 Counts are per grain mode, with the parameters from showinfo (ffmpeg 9.0) and again from the bitstream parser: identical
 either way. The parser itself gives the same parameters as dav1d's own frame header parser (`av1grain strip`) on 55
-streams, 1,774 pictures (`AV1FG_TEST_PARAMS=DIR cargo test`, DIR holding `name.ivf` + `name.json` pairs). CI checks the
+streams, 1,774 pictures (`AV1FG_TEST_PARAMS=DIR cargo test --release -- --ignored`, DIR holding `name.ivf` +
+`name.json` pairs), and mutated streams and random OBUs only ever give an error, never a crash (`cargo test
+fuzz_headers`, in a debug build so that integer overflow is caught; `AV1FG_FUZZ_ITERS` for more runs). CI checks the
 decoder's test streams and the synthetic ones on Mesa's CPU Vulkan driver (lavapipe), with Ubuntu 24.04's ffmpeg 6.1,
 so through the bitstream parser. The same with **hardware decoding** (`--hwaccel cuda`, NVDEC): the grain-free pictures equal
-dav1d's, and the GPU grain equals dav1d's full-frame grain, on the 4K HDR and 1080p films and four synthetic streams.
+dav1d's, and the GPU grain equals dav1d's full-frame grain, on 10 streams (the 4K HDR and 1080p films, update_grain = 0,
+chroma from luma, monochrome, SVT-AV1, rav1e), with the parameters from the bitstream and, cross-checked, from the side
+data. NVDEC doesn't decode 4:4:4, and it pads odd picture sizes (`decode` stops with an error there).
 The browser kit, now on the same shader file, still matches dav1d on every picture in Chromium (WebGPU on Vulkan,
 NVIDIA).
 

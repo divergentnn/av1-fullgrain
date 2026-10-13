@@ -339,10 +339,10 @@ fn ffprobe_of(ffmpeg: &str) -> String {
 /// Where `decode` and `check` take the grain parameters from.
 #[derive(Clone, Copy, ValueEnum, PartialEq, Eq, Debug)]
 enum ParamsFrom {
-    /// showinfo's film grain side data if ffmpeg is 7.0 or newer (older versions print only the seed), else the
-    /// bitstream
+    /// the bitstream with --hwaccel or with ffmpeg before 7.0 (which prints only the seed), else showinfo
     Auto,
-    /// ffmpeg's film grain side data, as its showinfo filter prints it (ffmpeg 7.0 or newer)
+    /// ffmpeg's film grain side data, as its showinfo filter prints it (ffmpeg 7.0 or newer); with --hwaccel, also
+    /// read from the bitstream and compared picture by picture
     Showinfo,
     /// the AV1 frame headers, read by av1-fullgrain-gpu's own parser (any ffmpeg; no --ss); the seed of every
     /// picture is checked against the decoder's
@@ -357,8 +357,11 @@ fn ffmpeg_major(ffmpeg: &str) -> Option<u32> {
     v.trim_start_matches('n').split(|c: char| !c.is_ascii_digit()).next()?.parse().ok()
 }
 
-fn resolve_params_from(p: ParamsFrom, ffmpeg: &str) -> ParamsFrom {
+/// `auto`: the bitstream with a hardware decoder (ffmpeg's own AV1 decoder exports its chroma multipliers and offsets
+/// differently from libdav1d, and ffmpeg may fall back to another decoder) or with ffmpeg before 7.0, else showinfo
+fn resolve_params_from(p: ParamsFrom, ffmpeg: &str, hwaccel: bool) -> ParamsFrom {
     match p {
+        ParamsFrom::Auto if hwaccel => ParamsFrom::Bitstream,
         ParamsFrom::Auto => match ffmpeg_major(ffmpeg) {
             Some(v) if v < 7 => ParamsFrom::Bitstream,
             _ => ParamsFrom::Showinfo,
@@ -371,6 +374,8 @@ fn resolve_params_from(p: ParamsFrom, ffmpeg: &str) -> ParamsFrom {
 struct Shown {
     seed: Option<u32>,
     grain: Option<FilmGrainParams>,
+    /// the side data could not be read: the picture fails
+    error: Option<String>,
 }
 
 /// ffmpeg decoding grain-free (native pixel format, raw planes on stdout), with the film grain of every picture from
@@ -383,6 +388,8 @@ struct GrainFree {
     n: usize,
     pending: BTreeMap<usize, Shown>,
     bitstream: Option<(mpsc::Receiver<Result<Option<FilmGrainParams>, String>>, Child)>,
+    /// showinfo's full parameters are read (and, with the bitstream also read, compared with it)
+    showinfo_params: bool,
 }
 
 impl GrainFree {
@@ -411,7 +418,15 @@ impl GrainFree {
             cmd.args(["-ss", ss]);
         }
         cmd.arg("-i").arg(input);
-        cmd.args(["-map", "0:v:0", "-vf", "showinfo", "-fps_mode", "passthrough"]);
+        // a hardware decoder hands monochrome back as 4:2:0, and converting that to gray changes the levels
+        // (ffmpeg treats gray as full range): copy the luma plane instead
+        let vf = match (hwaccel.is_some(), pix_fmt) {
+            (true, "gray") => "showinfo,format=yuv420p,extractplanes=y",
+            (true, "gray10le") => "showinfo,format=yuv420p10le,extractplanes=y",
+            (true, "gray12le") => "showinfo,format=yuv420p12le,extractplanes=y",
+            _ => "showinfo",
+        };
+        cmd.args(["-map", "0:v:0", "-vf", vf, "-fps_mode", "passthrough"]);
         if let Some(n) = frames {
             cmd.args(["-frames:v", &n.to_string()]);
         }
@@ -431,10 +446,11 @@ impl GrainFree {
         let (tx, rx) = mpsc::channel();
         let side = if hwaccel.is_some() { SideDataFrom::FfmpegAv1 } else { SideDataFrom::Libdav1d };
         let full = from == ParamsFrom::Showinfo;
+        // showinfo's parameters with a hardware decoder are checked against the bitstream, picture by picture
+        let want_bitstream = from == ParamsFrom::Bitstream || hwaccel.is_some();
         let errs = std::thread::spawn(move || {
             let mut text = String::new();
             let mut cur: Option<(usize, Shown)> = None;
-            let mut bad = None;
             for line in BufReader::new(err).lines().map_while(|l| l.ok()) {
                 if line.contains("Parsed_showinfo") {
                     if let Some(p) = line.find(" n:") {
@@ -442,7 +458,7 @@ impl GrainFree {
                             let _ = tx.send(c);
                         }
                         let n = line[p + 3..].split_whitespace().next().and_then(|v| v.parse().ok());
-                        cur = n.map(|n| (n, Shown { seed: None, grain: None }));
+                        cur = n.map(|n| (n, Shown { seed: None, grain: None, error: None }));
                     } else if line.contains("Film grain parameters") && line.contains("type av1") {
                         if let Some(c) = cur.as_mut() {
                             c.1.seed = line.find("seed=").and_then(|p| {
@@ -452,10 +468,11 @@ impl GrainFree {
                                 match parse_showinfo_line_from(&line, side) {
                                     Ok(g) => c.1.grain = g,
                                     Err(e) => {
-                                        bad = Some(if line.contains("y_points") {
-                                            e.to_string()
+                                        c.1.error = Some(if line.contains("y_points") {
+                                            format!("film grain side data: {e}")
                                         } else {
-                                            format!("{e} (this ffmpeg prints only the seed: use --params-from bitstream)")
+                                            format!("film grain side data: {e} (this ffmpeg prints only the seed: use \
+                                                     --params-from bitstream)")
                                         })
                                     }
                                 }
@@ -476,12 +493,9 @@ impl GrainFree {
             if let Some(c) = cur.take() {
                 let _ = tx.send(c);
             }
-            if let Some(b) = bad {
-                text.push_str(&format!("film grain side data: {b}\n"));
-            }
             text
         });
-        let bitstream = if from == ParamsFrom::Bitstream {
+        let bitstream = if want_bitstream {
             let mut c = Command::new(ffmpeg);
             c.args(["-hide_banner", "-nostdin", "-v", "error", "-i"]).arg(input).args(["-map", "0:v:0", "-c", "copy"]);
             if let Some(n) = frames {
@@ -512,7 +526,8 @@ impl GrainFree {
         } else {
             None
         };
-        Ok(GrainFree { child, out, grain: rx, errs: Some(errs), n: 0, pending: BTreeMap::new(), bitstream })
+        Ok(GrainFree { child, out, grain: rx, errs: Some(errs), n: 0, pending: BTreeMap::new(), bitstream,
+                       showinfo_params: full })
     }
 
     /// the next picture into buf; Ok(None) at the end
@@ -529,7 +544,9 @@ impl GrainFree {
             return Ok(None);
         }
         if got < buf.len() {
-            bail!("ffmpeg: truncated picture ({got} of {} bytes)", buf.len());
+            let e = self.ffmpeg_error();
+            bail!("ffmpeg's pictures are not the probed size ({got} bytes left over, a picture is {}; hardware \
+                   decoders may pad odd sizes): {}", buf.len(), e.trim());
         }
         let n = self.n;
         self.n += 1;
@@ -543,6 +560,9 @@ impl GrainFree {
             }
         }
         let si = self.pending.remove(&n).unwrap();
+        if let Some(e) = si.error {
+            bail!("picture {n}: {e}");
+        }
         let Some((rx, _)) = &self.bitstream else { return Ok(Some(si.grain)) };
         let g = match rx.recv_timeout(std::time::Duration::from_secs(120)) {
             Ok(Ok(g)) => g,
@@ -560,7 +580,18 @@ impl GrainFree {
             bail!("picture {n}: the decoder reports grain seed {:?}, the bitstream {:?}: they don't line up",
                   si.seed, g.map(|x| x.seed));
         }
+        let canon = |x: Option<FilmGrainParams>| x.filter(|x| x.has_grain()).map(|x| x.canonical());
+        if self.showinfo_params && canon(si.grain) != canon(g) {
+            bail!("picture {n}: ffmpeg's film grain side data differs from the bitstream's (this decoder exports them \
+                   differently: use --params-from bitstream)");
+        }
         Ok(Some(g))
+    }
+
+    /// ffmpeg's error output, once its picture output has ended
+    fn ffmpeg_error(&mut self) -> String {
+        let _ = self.child.wait();
+        self.errs.take().map(|h| h.join().unwrap_or_default()).unwrap_or_default()
     }
 
     fn finish(mut self) -> Res<()> {
@@ -647,7 +678,7 @@ fn decode(input: &Path, output: &Path, mode: GrainMode, raw: bool, ss: Option<&s
     let pr = probe(&ffprobe_of(ffmpeg), input)?;
     let f = pr.format;
     let mut r = gpu.open(false)?;
-    let from = resolve_params_from(params_from, ffmpeg);
+    let from = resolve_params_from(params_from, ffmpeg, hwaccel.is_some());
     eprintln!("av1-fullgrain-gpu: {} {}x{} {}-bit, {} grain on {}, parameters from {}", input.display(), f.width,
               f.height, f.bitdepth, mode.name(), r.adapter_name(), if from == ParamsFrom::Bitstream { "the bitstream" } else { "showinfo" });
     let mut src = GrainFree::start(ffmpeg, input, ss, frames, hwaccel, threads, &pr.pix_fmt, from)?;
@@ -827,7 +858,7 @@ fn check(streams: &[PathBuf], dav1d: &Path, ffmpeg: &str, modes: &[Mode], frames
          av1grain: Option<&Path>, threads: usize, hwaccel: Option<&str>, json: Option<&Path>, names: &[String],
          params_from: ParamsFrom, gpu: &Gpu) -> Res<()> {
     let mut r = gpu.open(false)?;
-    let from = resolve_params_from(params_from, ffmpeg);
+    let from = resolve_params_from(params_from, ffmpeg, hwaccel.is_some());
     eprintln!("GPU: {}; grain parameters from {}", r.adapter_name(),
               if from == ParamsFrom::Bitstream { "the bitstream (seeds checked against the decoder)" } else { "showinfo" });
     let tmp = std::env::temp_dir().join(format!("av1fg-check-{}", std::process::id()));

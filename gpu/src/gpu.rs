@@ -771,6 +771,11 @@ impl Renderer {
         Ok(id)
     }
 
+    /// the format of the oldest queued picture (what `receive` will write)
+    pub fn next_format(&self) -> Option<Format> {
+        self.in_flight.front().map(|f| f.fmt)
+    }
+
     /// pictures queued
     pub fn pending(&self) -> usize {
         self.in_flight.len()

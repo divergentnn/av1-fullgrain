@@ -55,9 +55,9 @@ unsafe fn planes_in<'a>(p: &AV1FGPicture, f: &Format) -> Result<Vec<Plane<'a>>, 
     for i in 0..n {
         let (w, h) = if i == 0 { (f.width, f.height) } else { (cw, ch) };
         if p.data[i].is_null() || p.stride[i] < (w * bps) as isize {
-            return Err(format!("plane {i}: null or stride too small"));
+            return Err(format!("plane {i}: null, or the stride is negative or too small"));
         }
-        let len = p.stride[i] as usize * (h - 1) + w * bps;
+        let len = plane_len(p.stride[i] as usize, w * bps, h).ok_or(format!("plane {i}: size overflows"))?;
         v.push(Plane { data: std::slice::from_raw_parts(p.data[i], len), stride: p.stride[i] as usize });
     }
     Ok(v)
@@ -67,16 +67,34 @@ unsafe fn planes_out<'a>(p: &AV1FGPicture, f: &Format) -> Result<Vec<PlaneMut<'a
     let bps = f.bytes_per_sample();
     let (cw, ch) = f.chroma_size();
     let n = if f.layout == Layout::I400 { 1 } else { 3 };
-    let mut v = Vec::with_capacity(n);
+    let mut spans = Vec::with_capacity(n);
     for i in 0..n {
         let (w, h) = if i == 0 { (f.width, f.height) } else { (cw, ch) };
         if p.data[i].is_null() || p.stride[i] < (w * bps) as isize {
-            return Err(format!("output plane {i}: null or stride too small"));
+            return Err(format!("output plane {i}: null, or the stride is negative or too small"));
         }
-        let len = p.stride[i] as usize * (h - 1) + w * bps;
+        let len = plane_len(p.stride[i] as usize, w * bps, h).ok_or(format!("output plane {i}: size overflows"))?;
+        spans.push((p.data[i] as usize, len));
+    }
+    // the planes become separate mutable slices: they must not overlap
+    for a in 0..n {
+        for b in a + 1..n {
+            let ((pa, la), (pb, lb)) = (spans[a], spans[b]);
+            if pa < pb.saturating_add(lb) && pb < pa.saturating_add(la) {
+                return Err(format!("output planes {a} and {b} overlap"));
+            }
+        }
+    }
+    let mut v = Vec::with_capacity(n);
+    for (i, &(_, len)) in spans.iter().enumerate() {
         v.push(PlaneMut { data: std::slice::from_raw_parts_mut(p.data[i], len), stride: p.stride[i] as usize });
     }
     Ok(v)
+}
+
+/// bytes a plane spans: stride * (height - 1) + one row
+fn plane_len(stride: usize, row: usize, h: usize) -> Option<usize> {
+    stride.checked_mul(h - 1)?.checked_add(row)
 }
 
 fn mode_of(m: c_int) -> Result<GrainMode, String> {
@@ -185,7 +203,13 @@ pub unsafe extern "C" fn av1fg_receive(h: *mut AV1FGRenderer, out: *const AV1FGP
         return -1;
     };
     let r = catch_unwind(AssertUnwindSafe(|| -> Result<c_int, String> {
+        let Some(q) = hr.r.next_format() else { return Ok(0) };
         let f = fmt_of(out)?;
+        if (f.width, f.height, f.bitdepth, f.layout) != (q.width, q.height, q.bitdepth, q.layout) {
+            return Err(format!("output picture {}x{} {}-bit layout {} does not match the queued picture {}x{} {}-bit \
+                                layout {} (it stays queued)", f.width, f.height, f.bitdepth, f.layout as i32, q.width,
+                               q.height, q.bitdepth, q.layout as i32));
+        }
         let mut planes = planes_out(out, &f)?;
         Ok(match hr.r.receive_planes(&mut planes).map_err(|e| e.0)? {
             Some(_) => 1,
@@ -211,7 +235,8 @@ pub unsafe extern "C" fn av1fg_can_submit(h: *const AV1FGRenderer) -> c_int {
     h.as_ref().map_or(0, |h| h.r.can_submit() as c_int)
 }
 
-/// One picture, synchronously: av1fg_submit + av1fg_receive. `in` and `out` may not overlap.
+/// One picture, synchronously: av1fg_submit + av1fg_receive. `in` and `out` may be the same buffers (the input is
+/// copied before the output is written).
 #[no_mangle]
 pub unsafe extern "C" fn av1fg_render(h: *mut AV1FGRenderer, pic: *const AV1FGPicture, grain: *const FilmGrainParams,
                                       mode: c_int, out: *const AV1FGPicture) -> c_int {

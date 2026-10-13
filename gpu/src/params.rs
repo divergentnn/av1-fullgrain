@@ -142,6 +142,37 @@ impl FilmGrainParams {
         Ok(())
     }
 
+    /// The parameters with every value that is not coded, and so can't change a picture, set to 0 (as dav1d leaves
+    /// them): coefficients of a plane without grain, chroma multipliers of a plane without scaling points, entries
+    /// past the counts. Decoders differ in these (ffmpeg's own AV1 decoder exports uncoded coefficients as -128).
+    pub fn canonical(&self) -> FilmGrainParams {
+        let mut g = *self;
+        let npos = g.npos();
+        let ny = g.num_y_points.clamp(0, 14) as usize;
+        g.y_points[ny..].fill([0, 0]);
+        if ny == 0 {
+            g.ar_coeffs_y = [0; 24];
+        } else {
+            g.ar_coeffs_y[npos..].fill(0);
+        }
+        let csfl = g.chroma_scaling_from_luma != 0;
+        for pl in 0..2 {
+            let n = g.num_uv_points[pl].clamp(0, 10) as usize;
+            g.uv_points[pl][n..].fill([0, 0]);
+            if n == 0 && !csfl {
+                g.ar_coeffs_uv[pl] = [0; 28];
+            } else {
+                g.ar_coeffs_uv[pl][npos + (ny > 0) as usize..].fill(0);
+            }
+            if n == 0 {
+                g.uv_mult[pl] = 0;
+                g.uv_luma_mult[pl] = 0;
+                g.uv_offset[pl] = 0;
+            }
+        }
+        g
+    }
+
     /// dav1d draws grain on a picture only when this holds (otherwise the picture passes unchanged)
     pub fn has_grain(&self) -> bool {
         self.num_y_points > 0 || self.num_uv_points[0] > 0 || self.num_uv_points[1] > 0
@@ -371,7 +402,9 @@ pub enum SideDataFrom {
     /// libdav1d (ffmpeg's software AV1 decoder): dav1d's signed values
     Libdav1d,
     /// ffmpeg's own AV1 decoder (used with -hwaccel): up to ffmpeg 9.0 at least it exports cb_mult, cb_luma_mult and
-    /// cb_offset (and the Cr ones) as coded, without removing the 128 / 128 / 256 offsets
+    /// cb_offset (and the Cr ones) as coded, without removing the 128 / 128 / 256 offsets. Which decoder actually ran
+    /// (ffmpeg may fall back) and whether a later ffmpeg changes this can't be told from the side data: the command
+    /// line tool reads the bitstream with a hardware decoder, or compares this with it.
     FfmpegAv1,
 }
 
@@ -477,10 +510,13 @@ pub fn parse_showinfo_line_from(line: &str, from: SideDataFrom) -> Result<Option
     g.overlap_flag = int("overlap_flag")? as i32;
     g.clip_to_restricted_range = int("limit_output_range")? as i32;
     if from == SideDataFrom::FfmpegAv1 {
+        // coded (and so offset) only for a plane with scaling points; otherwise 0 as in dav1d
         for pl in 0..2 {
-            g.uv_mult[pl] -= 128;
-            g.uv_luma_mult[pl] -= 128;
-            g.uv_offset[pl] -= 256;
+            if g.num_uv_points[pl] > 0 {
+                g.uv_mult[pl] -= 128;
+                g.uv_luma_mult[pl] -= 128;
+                g.uv_offset[pl] -= 256;
+            }
         }
     }
     g.validate()?;
@@ -508,6 +544,35 @@ mod tests {
         assert!(f.picture(1).is_none());
         assert_eq!(a.seed, 45231);
         assert_eq!(a.ar_coeffs_uv[1][12], -55);
+    }
+
+    /// ffmpeg's own AV1 decoder and libdav1d export the same monochrome picture differently: uncoded chroma
+    /// coefficients as -128 vs 0; the coded chroma multipliers of a 4:2:0 picture with the 128/128/256 offsets
+    #[test]
+    fn native_av1_side_data() {
+        let head = "Film grain parameters: type av1; seed=7; y_points={ (0,192) (255,192) }; chroma_scaling_from_luma=0; ";
+        let tail = "scaling_shift=11; ar_coeff_lag=1; ar_coeffs_y={ 4 1 3 0 }; ";
+        let m = |uv: &str, mults: &str| format!("{head}{uv}{tail}{mults}ar_coeff_shift=7; grain_scale_shift=1; overlap_flag=1; limit_output_range=1;");
+        let mono_native = m("uv_points[0]={ }; uv_points[1]={ }; ",
+                            "ar_coeffs_uv[0]={ -128 -128 -128 -128 -128 }; ar_coeffs_uv[1]={ -128 -128 -128 -128 -128 }; \
+                             uv_mult[0] = 0; uv_mult_luma[0] = 0; uv_offset[0] = 0; uv_mult[1] = 0; uv_mult_luma[1] = 0; uv_offset[1] = 0; ");
+        let mono_dav1d = m("uv_points[0]={ }; uv_points[1]={ }; ",
+                           "ar_coeffs_uv[0]={ 0 0 0 0 0 }; ar_coeffs_uv[1]={ 0 0 0 0 0 }; \
+                            uv_mult[0] = 0; uv_mult_luma[0] = 0; uv_offset[0] = 0; uv_mult[1] = 0; uv_mult_luma[1] = 0; uv_offset[1] = 0; ");
+        let a = parse_showinfo_line_from(&mono_native, SideDataFrom::FfmpegAv1).unwrap().unwrap();
+        let b = parse_showinfo_line_from(&mono_dav1d, SideDataFrom::Libdav1d).unwrap().unwrap();
+        assert_ne!(a, b);
+        assert_eq!(a.canonical(), b.canonical());
+        let c_native = m("uv_points[0]={ (0,96) }; uv_points[1]={ }; ",
+                         "ar_coeffs_uv[0]={ 1 2 3 4 5 }; ar_coeffs_uv[1]={ -128 -128 -128 -128 -128 }; \
+                          uv_mult[0] = 128; uv_mult_luma[0] = 192; uv_offset[0] = 256; uv_mult[1] = 0; uv_mult_luma[1] = 0; uv_offset[1] = 0; ");
+        let c_dav1d = m("uv_points[0]={ (0,96) }; uv_points[1]={ }; ",
+                        "ar_coeffs_uv[0]={ 1 2 3 4 5 }; ar_coeffs_uv[1]={ 0 0 0 0 0 }; \
+                         uv_mult[0] = 0; uv_mult_luma[0] = 64; uv_offset[0] = 0; uv_mult[1] = 0; uv_mult_luma[1] = 0; uv_offset[1] = 0; ");
+        let a = parse_showinfo_line_from(&c_native, SideDataFrom::FfmpegAv1).unwrap().unwrap();
+        let b = parse_showinfo_line_from(&c_dav1d, SideDataFrom::Libdav1d).unwrap().unwrap();
+        assert_eq!(a.canonical(), b.canonical());
+        assert_eq!(a.uv_luma_mult, [64, 0]);
     }
 
     #[test]

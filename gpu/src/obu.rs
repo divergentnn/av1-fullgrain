@@ -559,7 +559,7 @@ impl Av1Parser {
             } else {
                 data.len() - p
             };
-            if p + len > data.len() {
+            if p.checked_add(len).is_none_or(|end| end > data.len()) {
                 return err("OBU larger than its temporal unit");
             }
             let payload = &data[p..p + len];
@@ -883,6 +883,9 @@ impl Av1Parser {
             let idx = b.f(3) as usize;
             if !h.ref_frame_idx.contains(&idx) {
                 return err(format!("film_grain_params_ref_idx {idx} is not a reference of this frame"));
+            }
+            if !self.refs[idx].valid {
+                return err(format!("film_grain_params_ref_idx {idx} names an empty reference slot"));
             }
             // load_grain_params(): the slot's parameters with this frame's seed. A slot without grain gives all-zero
             // parameters: grain stays "present" (dav1d keeps film_grain.present and exports the seed) but draws nothing
@@ -1462,11 +1465,14 @@ impl<R: std::io::Read> IvfReader<R> {
 mod tests {
     use super::*;
 
-    /// the decoder's own test streams: the parser's grain equals PARAMS.json written by av1grain (dav1d's parser)
-    /// for these streams when AV1FG_TEST_PARAMS names a directory with <stream>.ivf and <stream>.json files
+    /// The parser's grain equals PARAMS.json written by `av1grain strip` (dav1d's own frame header parser), picture by
+    /// picture. AV1FG_TEST_PARAMS names a directory of <stream>.ivf + <stream>.json pairs (CI makes one from the
+    /// decoder's test streams and gpu/tests/make-vectors.sh).
     #[test]
+    #[ignore = "needs AV1FG_TEST_PARAMS=DIR with <stream>.ivf + <stream>.json (av1grain strip) pairs; run with --ignored"]
     fn matches_av1grain() {
-        let Some(dir) = std::env::var_os("AV1FG_TEST_PARAMS") else { return };
+        let dir = std::env::var_os("AV1FG_TEST_PARAMS")
+            .expect("AV1FG_TEST_PARAMS: a directory with <stream>.ivf + <stream>.json (av1grain strip) pairs");
         let (mut n, mut pics) = (0, 0);
         for e in std::fs::read_dir(dir).unwrap() {
             let p = e.unwrap().path();
@@ -1474,7 +1480,7 @@ mod tests {
                 continue;
             }
             let ivf = p.with_extension("ivf");
-            let Ok(f) = std::fs::File::open(&ivf) else { continue };
+            let f = std::fs::File::open(&ivf).unwrap_or_else(|e| panic!("{}: {e}", ivf.display()));
             let want = crate::params::ParamsFile::parse(&std::fs::read_to_string(&p).unwrap()).unwrap();
             let mut r = IvfReader::new(std::io::BufReader::new(f)).unwrap();
             let mut parser = Av1Parser::new();
@@ -1490,6 +1496,93 @@ mod tests {
             n += 1;
             pics += i;
         }
+        assert!(n > 0, "no <stream>.json + <stream>.ivf pairs in AV1FG_TEST_PARAMS");
         eprintln!("{n} streams, {pics} pictures");
+    }
+
+    fn tus(ivf: &[u8]) -> Vec<Vec<u8>> {
+        let mut r = IvfReader::new(ivf).unwrap();
+        let mut v = vec![];
+        while let Some(t) = r.next_frame().unwrap() {
+            v.push(t);
+        }
+        v
+    }
+
+    /// Mutated real streams and random OBUs: the parser returns Ok or Err, never panics (run without --release too:
+    /// debug builds check every addition and shift for overflow). AV1FG_FUZZ_ITERS sets the number of runs.
+    #[test]
+    fn fuzz_headers() {
+        let seeds = [
+            tus(include_bytes!("../tests/data/fgt15_420_10bit_csfl.ivf")),
+            tus(include_bytes!("../tests/data/tv05_420_8.ivf")),
+            tus(include_bytes!("../tests/data/table_420_10.ivf")),
+        ];
+        let iters: usize = std::env::var("AV1FG_FUZZ_ITERS").ok().and_then(|v| v.parse().ok()).unwrap_or(3000);
+        let mut x = 0x9E37_79B9_7F4A_7C15u64;
+        let mut rnd = move |n: usize| {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            (x % n.max(1) as u64) as usize
+        };
+        let (mut ok, mut errs) = (0usize, 0usize);
+        for _ in 0..iters {
+            let mut s = seeds[rnd(seeds.len())].clone();
+            for _ in 0..1 + rnd(8) {
+                let t = rnd(s.len());
+                let tu = &mut s[t];
+                match rnd(6) {
+                    // bit flips, mostly in the headers at the start of a temporal unit
+                    0..=2 if !tu.is_empty() => {
+                        let at = if rnd(4) > 0 { rnd(tu.len().min(96)) } else { rnd(tu.len()) };
+                        tu[at] ^= 1u8 << rnd(8);
+                    }
+                    3 if !tu.is_empty() => {
+                        let at = rnd(tu.len());
+                        tu[at] = rnd(256) as u8;
+                    }
+                    4 => {
+                        let l = rnd(tu.len() + 1);
+                        tu.truncate(l);
+                    }
+                    _ => {
+                        if rnd(2) == 0 && s.len() > 1 {
+                            s.remove(t);
+                        } else {
+                            let d = s[t].clone();
+                            s.insert(t, d);
+                        }
+                    }
+                }
+            }
+            let mut p = Av1Parser::new();
+            for tu in &s {
+                match p.temporal_unit(tu) {
+                    Ok(_) => ok += 1,
+                    Err(_) => errs += 1,
+                }
+            }
+        }
+        // random temporal units after a real sequence header
+        let seq = &seeds[0][0];
+        for _ in 0..iters {
+            let mut p = Av1Parser::new();
+            let _ = p.temporal_unit(seq);
+            for _ in 0..4 {
+                let mut tu = vec![0u8; 2 + rnd(64)];
+                for b in tu.iter_mut() {
+                    *b = rnd(256) as u8;
+                }
+                tu[0] = [0x12, 0x1a, 0x32, 0x22, 0x0a][rnd(5)]; // TD, frame header, frame, tile group, sequence header
+                tu[1] = (tu.len() - 2) as u8;
+                match p.temporal_unit(&tu) {
+                    Ok(_) => ok += 1,
+                    Err(_) => errs += 1,
+                }
+            }
+        }
+        eprintln!("{iters} runs: {ok} temporal units parsed, {errs} refused");
+        assert!(ok > 0 && errs > 0);
     }
 }
