@@ -137,18 +137,19 @@ are not tested yet.
 
 ## Speed
 
-GPU time per picture (timestamp queries) and pictures per second including upload and readback, 10-bit 4:2:0:
+GPU time per picture (timestamp queries) and pictures per second including upload and readback (3 pictures in
+flight), 10-bit 4:2:0:
 
 | | full-frame, GPU time | full-frame, pictures/s | standard, GPU time | standard, pictures/s |
 |---|---:|---:|---:|---:|
-| RTX 3090, 1080p | 4.3 ms | 224 | 0.7 ms | 402 |
-| RTX 3090, 4K | 6.8 ms | 109 | 0.8 ms | 135 |
-| AMD 2-CU iGPU, 1080p | 6.6 ms | 136 | 2.7 ms | 294 |
-| AMD 2-CU iGPU, 4K | 23.7 ms | 37 | 9.1 ms | 82 |
+| RTX 3090, 1080p | 1.8 ms | 478 | 0.6 ms | 1113 |
+| RTX 3090, 4K | 3.0 ms | 249 | 0.7 ms | 235 |
+| AMD Radeon 2-CU iGPU (Ryzen 9600X), 1080p | 6.6 ms | 136 | 2.7 ms | 294 |
+| AMD Radeon 2-CU iGPU (Ryzen 9600X), 4K | 23.7 ms | 37 | 9.1 ms | 82 |
 
-The RTX 3090 was shared with another job running at full load during these runs; on an idle RTX 3090 the browser
-kit measured 1.7 ms (1080p) and 3.2-3.5 ms (4K) for the same shaders. These numbers will be measured again on an
-idle machine. Decoding 4K AV1 in software is usually slower than the grain.
+At 4K, pictures/s is bound by moving 25 MB per picture to the GPU and back, not by the grain. Even the smallest
+integrated GPU draws 4K full-frame grain faster than 24 pictures/s; software AV1 decoding of 4K is usually the slower
+part. (RTX 3090 measured idle; the iGPU numbers come from a busy machine.)
 
 ## Licence
 
