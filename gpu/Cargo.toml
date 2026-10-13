@@ -1,0 +1,27 @@
+[package]
+name = "av1-fullgrain-gpu"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.87"
+license = "BSD-2-Clause"
+description = "AV1 film grain drawn full-frame (or standard) on the GPU with wgpu (Vulkan, Metal, DX12), bit-exact with av1-fullgrain's dav1d"
+repository = "https://github.com/divergentnn/av1-fullgrain"
+
+[lib]
+name = "av1_fullgrain_gpu"
+# rlib for Rust users; cdylib / staticlib for C and C++ (include/av1_fullgrain_gpu.h)
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "av1-fullgrain-gpu"
+path = "src/main.rs"
+
+[dependencies]
+wgpu = { version = "30.0.1", default-features = false, features = ["std", "parking_lot", "wgsl", "vulkan", "metal", "dx12"] }
+pollster = "0.4"
+serde_json = "1"
+clap = { version = "4.6", features = ["derive"] }
+sha2 = "0.10"
+
+[profile.release]
+lto = "thin"

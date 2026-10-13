@@ -18,7 +18,7 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-spec = importlib.util.spec_from_file_location("av1grain_mp4", HERE.parent.parent / "tools" / "av1grain_mp4.py")
+spec = importlib.util.spec_from_file_location("av1grain_mp4", HERE.parent.parent / "tools" / "av1grain" / "av1grain_mp4.py")
 mp4 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(mp4)
 
